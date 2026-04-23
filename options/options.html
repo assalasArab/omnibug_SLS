@@ -1,0 +1,395 @@
+<html>
+<head>
+    <title>Omnibug Settings</title>
+    <link href="./options.css" type="text/css" rel="stylesheet">
+    <style type="text/css" id="settingsStyles"></style>
+</head>
+<body>
+    <header>
+        <div>
+            <img src="../assets/images/blue-64.png" alt="O" />
+            <h1>Omnibug Settings</h1>
+        </div>
+        <p class="help"><strong>Note:</strong> changes to these settings are saved immediately. <a href="https://omnibug.io/help/settings?utm_source=extension&utm_medium=chrome&utm_campaign=settings-help" target="_blank">Learn more</a> about the various settings.</p>
+        <p class="help">Find a bug, feature suggestion, or just some feedback about Omnibug? <a href="https://github.com/MisterPhilip/omnibug/issues" target="_blank">Drop us a note!</a></p>
+    </header>
+    <section>
+
+        <fieldset>
+            <div class="row">
+                <div class="col-label">Highlight parameters</div>
+                <div class="col">
+                    <ul id="highlight-params"></ul>
+                    <input type="text" id="addParam" placeholder="Add Parameter">
+                </div>
+            </div>
+            <p class="help">Select parameters to highlight to easily see values. The values here should be the raw parameter names,
+                <em>not</em> the friendly names you see.<br />For example, for Adobe Analytics, to highlight <code>eVar10</code>, you should use <code>v10</code>.
+                You can find the raw parameter names by hovering over the parameter name in Omnibug and it'll appear in parenthesis.
+                These keys are case-insensitive.
+            </p>
+        </fieldset>
+
+        <fieldset>
+          <div class="row">
+              <div class="col-label">Additional summary parameters <span class="beta-badge">beta</span></div>
+              <div class="col">
+                  <ul id="addSummary-params"></ul>
+                  <span id="addSummaryStatus"></span>
+                  <input type="text" id="addSummary" placeholder="Add parameter, maximum of 3" />
+              </div>
+          </div>
+          <p class="help">Specify up to 3 additional values you wish to see in the summary list view. The values here should be the parameter names as 
+            seen in the detail view.<br />For example, for Adobe Analytics, to include <code>Events</code>, you should simply use <code>Events</code>.
+            The name is case sensitive.<br />
+              <strong>Note:</strong> This feature is currently in beta and the functionality &amp; settings could change over time.
+          </p>
+        </fieldset>
+
+        <fieldset>
+          <div class="row">
+              <div class="col-label">Custom GA4 server-side endpoints <span class="beta-badge">beta</span></div>
+              <div class="col">
+                  <ul id="customGA4-patterns"></ul>
+                  <input type="text" id="addCustomGA4" placeholder="e.g. sgtm.mycompany.com/track" />
+              </div>
+          </div>
+          <p class="help">
+              By default, Omnibug detects GA4 requests on URLs ending with <code>/g/collect</code>. If you use a
+              <strong>server-side Google Tag Manager</strong> (sGTM) with a custom endpoint that doesn't follow this
+              convention, add your domain/path here and matching requests will be parsed as GA4.<br />
+              Examples: <code>sgtm.mycompany.com/track</code>, <code>data.mysite.io/mp/collect</code>, <code>analytics.example.com/event</code>.<br />
+              Just type the raw substring &mdash; special characters are handled automatically.<br />
+              <strong>Note:</strong> Google Analytics 4 must be enabled in the providers list below for this to work.
+          </p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <div class="col-label">Rename parameters <span class="beta-badge">beta</span></div>
+                <div class="col">
+                    <span id="renameParamStatus"></span>
+                    <textarea type="text" id="renameParam" placeholder="Rename Parameters"></textarea>
+                </div>
+            </div>
+            <p class="help">Specify JSON to change the name of your parameter name, i.e.: 
+                <code>
+                    {
+                        "eVar1": "Page Title",
+                        "eVar2": "URL",
+                        "prop40": "Your own label"
+                    }
+                </code>. You can rename any of the provided field names listed in the Omnibug panel. <br />
+                <strong>Note:</strong> This feature is currently in beta and the functionality &amp; settings could change over time.
+            </p>
+        </fieldset>
+
+        <fieldset id="providers">
+            <div class="row">
+                <div class="col-label">Enabled providers</div>
+                <div class="col">
+                    <input type="text" id="provider-search" placeholder="Search for a provider&hellip;">
+                    <div id="providers-list" class="noselect"></div>
+                </div>
+            </div>
+            <p class="help">Select the providers (marketing / analytics tools) to be shown within Omnibug.</p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <label for="providerIcons">Show provider icons</label>
+                <div class="col">
+                    <input type="checkbox" name="providerIcons" id="providerIcons" data-bind-property="providerIcons" />
+                </div>
+            </div>
+            <p class="help">Show provider icon next to request entry.</p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <label for="alwaysExpand">Expand entries by default</label>
+                <div class="col">
+                    <input type="checkbox" name="alwaysExpand" id="alwaysExpand" data-bind-property="alwaysExpand" />
+                </div>
+            </div>
+            <p class="help">Omnibug can automatically expand all entries as they appear.</p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <label for="showRedirects">Show redirected entries</label>
+                <div class="col">
+                    <input type="checkbox" name="showRedirects" id="showRedirects" data-bind-property="showRedirects" />
+                </div>
+            </div>
+            <p class="help">Omnibug can show or hide redirected entries for the same parent request. Only the final request is shown if setting is unchecked. <a href="https://omnibug.io/help/redirected-requests?utm_source=extension&utm_medium=chrome&utm_campaign=settings-help" target="_blank">Learn more.</a></p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <label for="showNavigation">Show navigation entries</label>
+                <div class="col">
+                    <input type="checkbox" name="showNavigation" id="showNavigation" data-bind-property="showNavigation" />
+                </div>
+            </div>
+            <p class="help">Omnibug can show or hide dividers to show when you navigated to a new URL.</p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <label for="showQuotes">Add quotes around values</label>
+                <div class="col">
+                    <input type="checkbox" name="showQuotes" id="showQuotes" data-bind-property="showQuotes" />
+                </div>
+            </div>
+            <p class="help">Values can be shown with quotes to highlight any extra whitespaces or other characters.</p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <div class="col-label">Request sort order</div>
+                <div class="col">
+                    <div>
+                        <label title="Descriptions" for="requestSortOrderAsc">
+                            <input type="radio" name="requestSortOrder" id="requestSortOrderAsc" data-bind-property="requestSortOrder" value="asc" />
+                            Oldest requests first
+                        </label>
+                    </div>
+                    <div>
+                        <label title="Descriptions" for="requestSortOrderDesc">
+                            <input type="radio" name="requestSortOrder" id="requestSortOrderDesc"  data-bind-property="requestSortOrder" value="desc" />
+                            Newest requests first
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <p class="help">You can sort the requests either by newest first, or oldest first.</p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <div class="col-label">Parameter sort order</div>
+                <div class="col">
+                    <div>
+                        <label title="Descriptions" for="paramSortOrderField">
+                            <input type="radio" name="paramSortOrder" id="paramSortOrderField"
+                                data-bind-property="paramSortOrder" value="field" />
+                            Sort by field
+                        </label>
+                    </div>
+                    <div>
+                        <label title="Descriptions" for="paramSortOrderLabel">
+                            <input type="radio" name="paramSortOrder" id="paramSortOrderLabel"
+                                data-bind-property="paramSortOrder" value="label" />
+                            Sort by renamed labels <span class="help">(provided above)</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <p class="help">You can sort by the parameter name, i.e. eVar1, eVar2, or sort by the renamed label you provided above.</p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <div class="col-label">Parameter display style</div>
+                <div class="col">
+                    <div>
+                        <label title="Descriptions" for="showFullNamesTrue">
+                            <input type="radio" name="showFullNames" id="showFullNamesTrue" data-bind-property="showFullNames" value="true" />
+                            Descriptions <span class="help">(e.g. "Screen Resolution")</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label title="Descriptions" for="showFullNamesFalse">
+                            <input type="radio" name="showFullNames" id="showFullNamesFalse"  data-bind-property="showFullNames" value="false" />
+                            Parameter Names <span class="help">(e.g. "sr")</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <p class="help">Show the raw parameter name found in the URL, or the user-friendly description for each request.</p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <label for="wrapText">Wrap long values</label>
+                <div class="col">
+                    <input type="checkbox" name="wrapText" id="wrapText" data-bind-property="wrapText" />
+                </div>
+            </div>
+            <p class="help">Checking this will display the entire value by default, whereas un-checking this will show a truncated value until you hover over the row.</p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <label for="showNotes">Show note field</label>
+                <div class="col">
+                    <input type="checkbox" name="showNotes" id="showNotes" data-bind-property="showNotes" />
+                </div>
+            </div>
+            <p class="help">Checking this will show a field for each request for you to enter notes into. These notes will be included in your export.</p>
+        </fieldset>
+
+        <fieldset>
+            <div class="row">
+                <div class="col-label">Theme</div>
+                <div class="col">
+                    <div>
+                        <label title="Omnibug Theme" for="themeAuto">
+                            <input type="radio" name="theme" id="themeAuto" data-bind-property="theme" value="auto" />
+                            Automatic (based on browser settings)
+                        </label>
+                    </div>
+                    <div>
+                        <label title="Omnibug Theme" for="themeLight">
+                            <input type="radio" name="theme" id="themeLight"  data-bind-property="theme" value="light" />
+                            Light
+                        </label>
+                    </div>
+                    <div>
+                        <label title="Omnibug Theme" for="themeDark">
+                            <input type="radio" name="theme" id="themeDark"  data-bind-property="theme" value="dark" />
+                            Dark
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <p class="help">You can force a certain theme to show up, or use chrome's settings.</p>
+        </fieldset>
+
+        <fieldset class="color">
+            <div class="row">
+                <label for="color_load">Page load event</label>
+                <div class="col">
+                    <input type="color" id="color_load" data-bind-property="color_load" data-bind-style="background-color"  list="colors_load" />
+                    <span class="example" >Example</span>
+                    <datalist id="colors_load">
+                        <option>#dbedff</option>
+                    </datalist>
+                </div>
+            </div>
+            <p class="help">You can override the background color for page load events.</p>
+        </fieldset>
+
+        <fieldset class="color">
+            <div class="row">
+                <label for="color_click">Click event</label>
+                <div class="col">
+                    <input type="color" id="color_click" data-bind-property="color_click" data-bind-style="background-color" list="colors_click" />
+                    <span class="example">Example</span>
+                    <datalist id="colors_click">
+                        <option>#f1ffdb</option>
+                    </datalist>
+                </div>
+            </div>
+            <p class="help">You can override the background color for click events.</p>
+        </fieldset>
+
+        <fieldset class="color">
+            <div class="row">
+                <label for="color_highlight">Highlighted parameter</label>
+                <div class="col">
+                    <input type="color" id="color_highlight" data-bind-property="color_highlight" data-bind-style="background-color" list="colors_highlight" />
+                    <span class="example">Example</span>
+                    <datalist id="colors_highlight">
+                        <option>#ffff00</option>
+                        <option>#2f84da</option>
+                    </datalist>
+                </div>
+            </div>
+            <p class="help">
+                You can override the background color for parameters that are highlighted (see "Highlight parameters" setting above).
+                <em>Note:</em> for dark mode users, Omnibug will automatically switch this from the default yellow (<code>#ffff00</code>)
+                to a blue, but this can be overwritten if preferred. Simply change the color from <code>#ffff00</code> to any other value.
+            </p>
+        </fieldset>
+
+        <fieldset class="color">
+            <div class="row">
+                <label for="color_hover">Row hover</label>
+                <div class="col">
+                    <input type="color" id="color_hover" data-bind-property="color_hover" data-bind-style="background-color" list="colors_hover" />
+                    <span class="example">Example</span>
+                    <datalist id="colors_hover">
+                        <option>#cccccc</option>
+                    </datalist>
+                </div>
+            </div>
+            <p class="help">You can override the background color for when you hover over a row.</p>
+        </fieldset>
+
+        <fieldset class="color">
+            <div class="row">
+                <label for="color_redirect">Redirected event</label>
+                <div class="col">
+                    <input type="color" id="color_redirect" data-bind-property="color_redirect" data-bind-style="background-color" list="colors_redirect" />
+                    <span class="example">Example</span>
+                    <datalist id="colors_redirect">
+                        <option>#eeeeee</option>
+                    </datalist>
+                </div>
+            </div>
+            <p class="help">You can override the background color requests that were redirected (meaning there could be multiple of the same requests).</p>
+        </fieldset>
+
+        <fieldset class="color">
+            <div class="row">
+                <label for="color_quotes">Quotes</label>
+                <div class="col">
+                    <input type="color" id="color_quotes" data-bind-property="color_quotes" data-bind-style="color" list="colors_quotes" />
+                    <span class="example">"<span style="color: #555555 !important;">Example</span>"</span>
+                    <datalist id="colors_quotes">
+                        <option>#ff0000</option>
+                    </datalist>
+                </div>
+            </div>
+            <p class="help">You can override the color for quotes that surround values (if enabled in the "Add quotes around values" setting above).</p>
+        </fieldset>
+
+        <fieldset id="trackerWrapper">
+            <div class="row">
+                <label for="allowTracking">Send usage stats</label>
+                <div class="col">
+                    <input type="checkbox" name="allowTracking" id="allowTracking" data-bind-property="allowTracking" />
+                </div>
+            </div>
+            <p class="help">Checking this will send usage data to Google Analytics for the Omnibug developers to understand how users are interacting with the extension.<br />
+                No information about the user, the page, or request details will be sent.</p>
+        </fieldset>
+
+        <fieldset id="contextMenu">
+            <div class="row">
+                <label for="contextMenuBeta">Custom Context Menu</label>
+                <div class="col">
+                    <input type="checkbox" name="contextMenuBeta" id="contextMenuBeta" data-bind-property="contextMenuBeta" />
+                </div>
+            </div>
+            <p class="help">Checking this will enable the custom context menu to show up when you right click a row within an entry.
+                That menu allows you to (un)highlight the entry and copy its value. <strong>This is an experimental feature</strong>
+                that is working for a majority of beta testers that we wanted to roll out to the general public. If you're running
+                into issues with copying, you can disable the context menu here.</p>
+        </fieldset>
+
+        <fieldset id="reset">
+            <div class="row">
+                <div class="col-label">Reset Settings</div>
+                <div class="col">
+                    <button id="reset-defaults" title="Clicking this will reset all of your Omnibug settings!">Reset Settings</button>
+                </div>
+            </div>
+            <p class="help">If you want to reset your settings, or are having issues with Omnibug, you can click the button to reset all settings to their default state.</p>
+        </fieldset>
+    </section>
+    <footer>
+        <p>&copy; 2026 <a href="https://omnibug.io/?utm_source=extension&utm_medium=chrome&utm_campaign=settings-about">Omnibug</a><br />v2.1.0</p>
+    </footer>
+
+    <script src="../providers.js"></script>
+    <script src="../libs/OmnibugSettings.js"></script>
+    <script src="../libs/OmnibugTracker.js"></script>
+    <script src="../libs/helpers.js"></script>
+    <script src="../assets/js/fuse.js"></script>
+    <script src="./options.js"></script>
+
+</body>
+</html>
