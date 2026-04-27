@@ -4257,7 +4257,9 @@ class GoogleAdsProvider extends BaseProvider {
     constructor() {
         super();
         this._key = "GOOGLEADS";
-        this._pattern = /\/pagead\/(?:viewthrough)conversion/;
+        // Match the legacy /pagead/conversion and /pagead/viewthroughconversion
+        // endpoints AND the modern /ccm/collect endpoint used by Google Ads / Google Tag.
+        this._pattern = /\/pagead\/(?:viewthrough)?conversion|\/ccm\/collect/;
         this._name = "Google Ads";
         this._type = "marketing";
         this._keywords = ["aw", "ad words"];
@@ -4329,13 +4331,36 @@ class GoogleAdsProvider extends BaseProvider {
      */
     handleCustom(url, params) {
         let results = [],
-            pathParts = url.pathname.match(/\/([^/]+)\/(?:AW-)?(\d+)\/?$/),
-            account = "AW-" + pathParts[2],
-            data = params.get("data") || "",
-            dataEvent = data.match(/event=([^;]+)(?:$|;)/),
             requestType = "";
 
-        /* istanbul ignore else */
+        // Two URL shapes are now supported:
+        //   1) /pagead/conversion/AW-12345/  (legacy)
+        //   2) /ccm/collect                  (modern Google Tag / Google Ads)
+        // The legacy shape carries the account ID in the path; the modern one
+        // carries it in `tids` or `tid` query params.
+        const isCcm = /\/ccm\/collect/.test(url.pathname);
+
+        let account = "";
+        let pathParts = null;
+
+        if (isCcm) {
+            // /ccm/collect: extract account from `tid` or `tids` query params
+            const tid = params.get("tid") || params.get("tids");
+            if (tid) {
+                // tid may already include the AW- prefix; if not, add it
+                account = /^AW-/i.test(tid) ? tid : "AW-" + tid;
+            }
+        } else {
+            // Legacy /pagead/(viewthrough)?conversion/AW-12345/ pattern
+            pathParts = url.pathname.match(/\/([^/]+)\/(?:AW-)?(\d+)\/?$/);
+            if (pathParts && pathParts[2]) {
+                account = "AW-" + pathParts[2];
+            }
+        }
+
+        const data = params.get("data") || "";
+        const dataEvent = data.match(/event=([^;]+)(?:$|;)/);
+
         if (account) {
             results.push({
                 "key": "account",
@@ -4361,8 +4386,20 @@ class GoogleAdsProvider extends BaseProvider {
             } else {
                 requestType = dataEvent[1];
             }
-        } else {
+        } else if (isCcm) {
+            // For /ccm/collect, the event name is in `en` (Google Tag style)
+            const en = params.get("en");
+            if (en === "page_view" || en === "pageview") {
+                requestType = "Page View";
+            } else if (en) {
+                requestType = en;
+            } else {
+                requestType = "Collect";
+            }
+        } else if (pathParts && pathParts[1]) {
             requestType = (pathParts[1] === "viewthroughconversion") ? "Conversion" : pathParts[1].replace("viewthrough", "");
+        } else {
+            requestType = "Conversion";
         }
 
         results.push({
@@ -4970,7 +5007,18 @@ class GoogleAnalytics4Provider extends BaseProvider
     {
         super();
         this._key        = "GOOGLEANALYTICS4";
-        this._defaultPattern = /https?:\/\/([^/]+)(?<!(clarity\.ms|transcend\.io)|(\.doubleclick\.net))\/g\/collect(?:[/#?]|$)/;
+        // Match all known GA4 collect endpoints, including server-side setups with
+        // custom paths (e.g. example.com/track/g/collect, sgtm.example.com/g/collect).
+        // Endpoints supported:
+        //   /g/collect              — standard client-side
+        //   /g/s/collect            — server-side via Google's regional analytics domains
+        //                            (e.g. region1.analytics.google.com/g/s/collect)
+        //   /mp/collect             — Measurement Protocol (server-to-server)
+        //   /r/collect              — legacy redirect endpoint
+        // The (?:\/[^\/?#]+)* allows any number of path segments BEFORE /g/collect,
+        // so custom sGTM mounts (e.g. /<custom-path>/g/collect) are matched.
+        // Excludes clarity.ms, transcend.io, and *.doubleclick.net.
+        this._defaultPattern = /https?:\/\/([^/]+)(?<!(clarity\.ms|transcend\.io)|(\.doubleclick\.net))(?:\/[^/?#]+)*\/(?:g(?:\/s)?|mp|r)\/collect(?:[/#?]|$)/;
         this._pattern    = this._defaultPattern;
         this._name       = "Google Analytics 4";
         this._type       = "analytics";

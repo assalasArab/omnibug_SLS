@@ -207,6 +207,10 @@
                     value = settings["providers"];
                 } else if(type === "checkbox") {
                     value = input.checked;
+                } else if(type === "radio") {
+                    // Convert "true"/"false" string values into real booleans for boolean toggles
+                    if (value === "true") { value = true; }
+                    else if (value === "false") { value = false; }
                 } else if(type === "color") {
                     if(!/^#([a-f0-9]{3}|[a-f0-9]{6})$/i.test(value)) {
                         value = "#FFFFFF";

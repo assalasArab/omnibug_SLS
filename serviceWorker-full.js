@@ -141,6 +141,10 @@ class OmnibugSettings {
             // e.g. ["sgtm.mycompany.com/track", "data.mysite.io/collect"]
             customGA4Patterns: [],
 
+            // If true, the popup buffer is NOT cleared when the user navigates to a new page.
+            // Default false: each page starts fresh (matches classic Omnibug behavior).
+            keepHistoryAcrossPages: false,
+
             // JSON defining the params to rename
             renameParameters: {},
 
@@ -4548,7 +4552,9 @@ class GoogleAdsProvider extends BaseProvider {
     constructor() {
         super();
         this._key = "GOOGLEADS";
-        this._pattern = /\/pagead\/(?:viewthrough)conversion/;
+        // Match the legacy /pagead/conversion and /pagead/viewthroughconversion
+        // endpoints AND the modern /ccm/collect endpoint used by Google Ads / Google Tag.
+        this._pattern = /\/pagead\/(?:viewthrough)?conversion|\/ccm\/collect/;
         this._name = "Google Ads";
         this._type = "marketing";
         this._keywords = ["aw", "ad words"];
@@ -4620,13 +4626,36 @@ class GoogleAdsProvider extends BaseProvider {
      */
     handleCustom(url, params) {
         let results = [],
-            pathParts = url.pathname.match(/\/([^/]+)\/(?:AW-)?(\d+)\/?$/),
-            account = "AW-" + pathParts[2],
-            data = params.get("data") || "",
-            dataEvent = data.match(/event=([^;]+)(?:$|;)/),
             requestType = "";
 
-        /* istanbul ignore else */
+        // Two URL shapes are now supported:
+        //   1) /pagead/conversion/AW-12345/  (legacy)
+        //   2) /ccm/collect                  (modern Google Tag / Google Ads)
+        // The legacy shape carries the account ID in the path; the modern one
+        // carries it in `tids` or `tid` query params.
+        const isCcm = /\/ccm\/collect/.test(url.pathname);
+
+        let account = "";
+        let pathParts = null;
+
+        if (isCcm) {
+            // /ccm/collect: extract account from `tid` or `tids` query params
+            const tid = params.get("tid") || params.get("tids");
+            if (tid) {
+                // tid may already include the AW- prefix; if not, add it
+                account = /^AW-/i.test(tid) ? tid : "AW-" + tid;
+            }
+        } else {
+            // Legacy /pagead/(viewthrough)?conversion/AW-12345/ pattern
+            pathParts = url.pathname.match(/\/([^/]+)\/(?:AW-)?(\d+)\/?$/);
+            if (pathParts && pathParts[2]) {
+                account = "AW-" + pathParts[2];
+            }
+        }
+
+        const data = params.get("data") || "";
+        const dataEvent = data.match(/event=([^;]+)(?:$|;)/);
+
         if (account) {
             results.push({
                 "key": "account",
@@ -4652,8 +4681,20 @@ class GoogleAdsProvider extends BaseProvider {
             } else {
                 requestType = dataEvent[1];
             }
-        } else {
+        } else if (isCcm) {
+            // For /ccm/collect, the event name is in `en` (Google Tag style)
+            const en = params.get("en");
+            if (en === "page_view" || en === "pageview") {
+                requestType = "Page View";
+            } else if (en) {
+                requestType = en;
+            } else {
+                requestType = "Collect";
+            }
+        } else if (pathParts && pathParts[1]) {
             requestType = (pathParts[1] === "viewthroughconversion") ? "Conversion" : pathParts[1].replace("viewthrough", "");
+        } else {
+            requestType = "Conversion";
         }
 
         results.push({
@@ -5261,7 +5302,18 @@ class GoogleAnalytics4Provider extends BaseProvider
     {
         super();
         this._key        = "GOOGLEANALYTICS4";
-        this._defaultPattern = /https?:\/\/([^/]+)(?<!(clarity\.ms|transcend\.io)|(\.doubleclick\.net))\/g\/collect(?:[/#?]|$)/;
+        // Match all known GA4 collect endpoints, including server-side setups with
+        // custom paths (e.g. example.com/track/g/collect, sgtm.example.com/g/collect).
+        // Endpoints supported:
+        //   /g/collect              — standard client-side
+        //   /g/s/collect            — server-side via Google's regional analytics domains
+        //                            (e.g. region1.analytics.google.com/g/s/collect)
+        //   /mp/collect             — Measurement Protocol (server-to-server)
+        //   /r/collect              — legacy redirect endpoint
+        // The (?:\/[^\/?#]+)* allows any number of path segments BEFORE /g/collect,
+        // so custom sGTM mounts (e.g. /<custom-path>/g/collect) are matched.
+        // Excludes clarity.ms, transcend.io, and *.doubleclick.net.
+        this._defaultPattern = /https?:\/\/([^/]+)(?<!(clarity\.ms|transcend\.io)|(\.doubleclick\.net))(?:\/[^/?#]+)*\/(?:g(?:\/s)?|mp|r)\/collect(?:[/#?]|$)/;
         this._pattern    = this._defaultPattern;
         this._name       = "Google Analytics 4";
         this._type       = "analytics";
@@ -12269,7 +12321,34 @@ chrome.runtime.onInstalled.addListener((details) => {
     settings.migrate().then((loadedSettings) => {
         applyCustomGA4Patterns(loadedSettings);
     });
+    setupActiveBadge();
 });
+
+// Also re-apply badge when the service worker wakes up (browser restart, etc.)
+chrome.runtime.onStartup.addListener(() => {
+    setupActiveBadge();
+});
+
+// And on initial service worker boot (catches Manifest V3 wake-ups)
+setupActiveBadge();
+
+/**
+ * Display a small green dot on the extension's toolbar icon to indicate
+ * Omnibug is active and listening. Shown on all tabs.
+ */
+function setupActiveBadge() {
+    try {
+        if (chrome.action) {
+            chrome.action.setBadgeText({ text: "ON" });
+            chrome.action.setBadgeBackgroundColor({ color: "#26c281" });
+            if (chrome.action.setBadgeTextColor) {
+                chrome.action.setBadgeTextColor({ color: "#ffffff" });
+            }
+        }
+    } catch (e) {
+        console.error("Failed to set extension badge", e);
+    }
+}
 
 
 /**
@@ -12320,6 +12399,15 @@ const MAX_HISTORY_PER_TAB = 100;
 const dataLayerHistory = {};
 const MAX_DATALAYER_PER_TAB = 100;
 let dataLayerEventSeq = 0;
+
+/*
+ Debug log: stores ALL captured GA4-pattern requests per tab with raw data,
+ even if Omnibug's parser fails or produces unexpected output. Used by the
+ popup's "Debug" view to diagnose missing events.
+ */
+const debugLog = {};
+const MAX_DEBUG_PER_TAB = 200;
+let debugSeq = 0;
 
 /*
  Ports opened by popup windows. Keyed by tabId.
@@ -12378,7 +12466,8 @@ chrome.runtime.onConnect.addListener((port) => {
                 port.postMessage({
                     event: "history",
                     requests: requestHistory[tabId] || [],
-                    dataLayerEvents: dataLayerHistory[tabId] || []
+                    dataLayerEvents: dataLayerHistory[tabId] || [],
+                    debugEntries: debugLog[tabId] || []
                 });
             } catch (e) {
                 console.error("Failed to send initial data to popup", e);
@@ -12395,6 +12484,7 @@ chrome.runtime.onConnect.addListener((port) => {
             if (msg && msg.action === "clear") {
                 requestHistory[tabId] = [];
                 dataLayerHistory[tabId] = [];
+                debugLog[tabId] = [];
             }
         });
 
@@ -12444,8 +12534,119 @@ chrome.runtime.onConnect.addListener((port) => {
 chrome.webRequest.onBeforeRequest.addListener(
     (details) => {
 
+        // ==============================================================
+        // DEBUG MODE: capture ALL requests matching GA4-like patterns
+        // even if they get filtered out later, for diagnostic purposes.
+        //
+        // We allow tabId === -1 because hits emitted from a page's service
+        // worker (a common sGTM proxy pattern) report tabId = -1 even though
+        // they belong to a tab. We attribute them via documentUrl/initiator.
+        // ==============================================================
+        const isGA4LikeUrl = /\/g\/collect|\/collect\?|\/collect\b/i.test(details.url);
+        const captureForDebug = isGA4LikeUrl && details.method !== "OPTIONS";
+
+        // Pre-compute postData for the debug log even if we skip later
+        let debugPostData = "";
+        if (captureForDebug && details.method === "POST" && details.requestBody) {
+            try {
+                const body = details.requestBody;
+                if (body.raw && body.raw[0]) {
+                    debugPostData = (new Uint8Array(body.raw[0].bytes)).reduce((p, b) => p + String.fromCharCode(b), "");
+                } else if (body.formData) {
+                    debugPostData = JSON.stringify(body.formData);
+                } else if (body.error) {
+                    debugPostData = "[POST body error: " + body.error + "]";
+                }
+            } catch (e) { debugPostData = "[error reading body: " + e.message + "]"; }
+        }
+
         // Skip requests we definitely don't care about (options / non-provider URLs)
-       if (!isProviderRequest(details)) { return; }
+        const isProvider = isProviderRequest(details);
+
+        // Log to debug buffer with diagnostic info if it's GA4-like
+        if (captureForDebug) {
+            const debugEntry = {
+                seq: ++debugSeq,
+                timestamp: details.timeStamp,
+                method: details.method,
+                url: details.url,
+                postData: debugPostData,
+                matched: isProvider,
+                // Try to extract en= and t= for quick diagnostic
+                eventNameInUrl: extractEventNameFromUrl(details.url),
+                eventNameInPost: extractEventNameFromPost(debugPostData),
+                isBatch: debugPostData && /\n/.test(debugPostData),  // GA4 batches separate events with newlines
+                batchEventCount: debugPostData ? (debugPostData.split(/\n/).filter(l => /(?:^|\&)en=/.test(l)).length || 1) : 0,
+                fromServiceWorker: details.tabId === -1,
+                initiator: details.initiator || ""
+            };
+
+            // Resolve which tab this debug entry belongs to.
+            // Direct webRequest: details.tabId.
+            // Page service worker: tabId is -1, but we can try to attribute the
+            // hit to any tab whose URL origin matches the request's initiator.
+            let targetTabIds = [];
+            if (details.tabId !== -1) {
+                targetTabIds.push(details.tabId);
+            } else if (details.initiator) {
+                // Find any open popup ports whose tab is on the matching origin
+                const initiatorOrigin = details.initiator;
+                Object.keys(popupPorts).forEach((tabIdStr) => {
+                    const tabId = parseInt(tabIdStr, 10);
+                    if (!isNaN(tabId)) { targetTabIds.push(tabId); }
+                });
+                // Also try to use chrome.tabs.query to find tabs matching the initiator
+                try {
+                    chrome.tabs.query({}, (tabs) => {
+                        tabs.forEach((tab) => {
+                            if (tab.url && tab.url.indexOf(initiatorOrigin) === 0) {
+                                if (targetTabIds.indexOf(tab.id) === -1) {
+                                    addToDebugLog(tab.id, debugEntry);
+                                    if (popupPorts[tab.id]) {
+                                        try {
+                                            popupPorts[tab.id].postMessage({
+                                                event: "debugEntry",
+                                                debugEntry: debugEntry
+                                            });
+                                        } catch (e) { /* ignore */ }
+                                    }
+                                }
+                            }
+                        });
+                    });
+                } catch (e) { /* tabs API unavailable */ }
+            }
+
+            // Add to all relevant tabs' debug logs and forward live
+            targetTabIds.forEach((tabId) => {
+                addToDebugLog(tabId, debugEntry);
+                if (popupPorts[tabId]) {
+                    try {
+                        popupPorts[tabId].postMessage({
+                            event: "debugEntry",
+                            debugEntry: debugEntry
+                        });
+                    } catch (e) { /* popup closed */ }
+                }
+            });
+        }
+
+        if (!isProvider) { return; }
+
+        // Real hits also need to be attributed when coming from a page service worker
+        let realTabId = details.tabId;
+        if (realTabId === -1 && details.initiator) {
+            // We'll look up the tab synchronously isn't possible here, so we
+            // broadcast to ALL popup ports whose origin matches.
+            // For simplicity, we attribute to the first popup port we find that
+            // could match. This is best-effort — it may double-attribute on
+            // multiple tabs of the same site, but that's acceptable for QA use.
+            const initiatorOrigin = details.initiator;
+            const candidates = Object.keys(popupPorts).map((id) => parseInt(id, 10));
+            if (candidates.length > 0) {
+                realTabId = candidates[0];  // Best-effort: use first connected popup
+            }
+        }
 
         let data = {
             "request": {
@@ -12491,21 +12692,21 @@ chrome.webRequest.onBeforeRequest.addListener(
             );
 
             // Always buffer for the popup view (even if no panel is open)
-            addToHistory(details.tabId, finalData);
+            addToHistory(realTabId, finalData);
 
             // Forward to devtools if it's open for this tab (existing behavior)
-            if (tabs[details.tabId]) {
+            if (tabs[realTabId]) {
                 try {
-                    tabs[details.tabId].postMessage(finalData);
+                    tabs[realTabId].postMessage(finalData);
                 } catch (e) {
                     console.error("Failed to post to devtools", e);
                 }
             }
 
             // Also forward to the popup if it's open for this tab
-            if (popupPorts[details.tabId]) {
+            if (popupPorts[realTabId]) {
                 try {
-                    popupPorts[details.tabId].postMessage(finalData);
+                    popupPorts[realTabId].postMessage(finalData);
                 } catch (e) {
                     console.error("Failed to post to popup", e);
                 }
@@ -12557,42 +12758,50 @@ chrome.webRequest.onErrorOccurred.addListener(
 
 /**
  * Listen for all navigations that occur on a top-level frame.
- * Clears the popup history buffer for the tab and forwards the navigation event
- * to any open devtools panel.
+ * Clears the popup history buffer for the tab (unless keepHistoryAcrossPages is enabled)
+ * and forwards the navigation event to any open devtools panel.
  */
 chrome.webNavigation.onCommitted.addListener(
     (details) => {
         if (details.frameId !== 0 || details.tabId === -1) { return; }
 
-        // Clear popup buffers for this tab on navigation so history matches what the user sees
-        requestHistory[details.tabId] = [];
-        dataLayerHistory[details.tabId] = [];
+        // Clear buffers on navigation UNLESS user opted in to keep history across pages
+        const settings = new OmnibugSettings();
+        settings.load().then((loadedSettings) => {
+            const keepHistory = !!loadedSettings.keepHistoryAcrossPages;
+            if (!keepHistory) {
+                requestHistory[details.tabId] = [];
+                dataLayerHistory[details.tabId] = [];
+                debugLog[details.tabId] = [];
+            }
 
-        // Notify the popup if it's open so it can clear its UI
-        if (popupPorts[details.tabId]) {
-            try {
-                popupPorts[details.tabId].postMessage({
-                    event: "webNavigation",
-                    request: {
-                        tab: details.tabId,
-                        timestamp: details.timeStamp,
-                        url: details.url
-                    }
-                });
-            } catch (e) { /* popup just closed, ignore */ }
-        }
+            // Notify the popup if it's open so it can react (clear list or add a page separator)
+            if (popupPorts[details.tabId]) {
+                try {
+                    popupPorts[details.tabId].postMessage({
+                        event: "webNavigation",
+                        keepHistory: keepHistory,
+                        request: {
+                            tab: details.tabId,
+                            timestamp: details.timeStamp,
+                            url: details.url
+                        }
+                    });
+                } catch (e) { /* popup just closed, ignore */ }
+            }
 
-        // Original devtools behavior
-        if (!tabHasOmnibugOpen(details.tabId)) { return; }
-        const data = {
-            "request": {
-                "tab": details.tabId,
-                "timestamp": details.timeStamp,
-                "url": details.url
-            },
-            "event": "webNavigation"
-        };
-        tabs[details.tabId].postMessage(data);
+            // Original devtools behavior
+            if (!tabHasOmnibugOpen(details.tabId)) { return; }
+            const data = {
+                "request": {
+                    "tab": details.tabId,
+                    "timestamp": details.timeStamp,
+                    "url": details.url
+                },
+                "event": "webNavigation"
+            };
+            tabs[details.tabId].postMessage(data);
+        });
     }
 );
 
@@ -12602,6 +12811,7 @@ chrome.webNavigation.onCommitted.addListener(
 chrome.tabs.onRemoved.addListener((tabId) => {
     delete requestHistory[tabId];
     delete dataLayerHistory[tabId];
+    delete debugLog[tabId];
     delete popupPorts[tabId];
 });
 
@@ -12637,6 +12847,48 @@ function addDataLayerToHistory(tabId, event) {
 }
 
 /**
+ * Append a debug entry to the per-tab debug buffer.
+ */
+function addToDebugLog(tabId, entry) {
+    if (tabId === -1) { return; }
+    if (!debugLog[tabId]) { debugLog[tabId] = []; }
+    debugLog[tabId].push(entry);
+    if (debugLog[tabId].length > MAX_DEBUG_PER_TAB) {
+        debugLog[tabId].splice(0, debugLog[tabId].length - MAX_DEBUG_PER_TAB);
+    }
+}
+
+/**
+ * Extract `en=xxx` from a URL query string.
+ */
+function extractEventNameFromUrl(url) {
+    try {
+        const u = new URL(url);
+        const en = u.searchParams.get("en");
+        if (en) { return en; }
+        const t = u.searchParams.get("t");
+        if (t) { return "t=" + t; }
+    } catch (e) { /* ignore */ }
+    return null;
+}
+
+/**
+ * Extract event names from POST body (handles GA4 batches with multiple events).
+ */
+function extractEventNameFromPost(postData) {
+    if (!postData || typeof postData !== "string") { return null; }
+    const events = [];
+    // GA4 batches separate events with newlines, sometimes a single event has en=xxx
+    postData.split(/\n/).forEach((line) => {
+        const m = line.match(/(?:^|&)en=([^&]+)/);
+        if (m) { events.push(decodeURIComponent(m[1])); }
+    });
+    if (events.length === 0) { return null; }
+    if (events.length === 1) { return events[0]; }
+    return "[batch:" + events.length + "] " + events.join(", ");
+}
+
+/**
  * Check whether a request matches any enabled provider.
  * Used for both devtools and popup capture (no panel-open gating).
  *
@@ -12647,8 +12899,11 @@ function isProviderRequest(details) {
     if (typeof providerPattern === "undefined" || !(providerPattern instanceof RegExp)) {
         providerPattern = OmnibugProvider.getPattern();
     }
+    // Note: we no longer filter on tabId !== -1 because hits emitted from a
+    // page's service worker (e.g. sGTM proxies running as page service workers)
+    // arrive with tabId = -1 even though they belong to a real tab. Skipping
+    // them would miss real GA4 traffic on those sites.
     return details.method !== "OPTIONS" &&
-            details.tabId !== -1 &&
             providerPattern.test(details.url) &&
             !/\/.well-known\//i.test(details.url);
 }

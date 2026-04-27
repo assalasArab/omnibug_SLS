@@ -65,6 +65,26 @@
         </fieldset>
 
         <fieldset>
+          <div class="row">
+              <div class="col-label">Keep history across pages <span class="beta-badge">beta</span></div>
+              <div class="col">
+                <div class="nav-settings-group" role="radiogroup">
+                    <input type="radio" id="keepHistoryAcrossPages-no" name="keepHistoryAcrossPages" value="false" data-bind-property="keepHistoryAcrossPages" />
+                    <label for="keepHistoryAcrossPages-no">Clear on navigation <small>(default)</small></label>
+                    <input type="radio" id="keepHistoryAcrossPages-yes" name="keepHistoryAcrossPages" value="true" data-bind-property="keepHistoryAcrossPages" />
+                    <label for="keepHistoryAcrossPages-yes">Keep history <small>(until manually cleared)</small></label>
+                </div>
+              </div>
+          </div>
+          <p class="help">
+              By default, Omnibug clears the popup's captured events when you navigate to a new page, so each page starts fresh.
+              Enable "Keep history" to retain everything captured across page changes — useful for tracking multi-page funnels
+              (e.g. product listing → product page → cart → checkout). Use the Clear button in the popup to reset manually.<br />
+              The service worker still caps at 100 hits and 100 dataLayer events per tab.
+          </p>
+        </fieldset>
+
+        <fieldset>
             <div class="row">
                 <div class="col-label">Rename parameters <span class="beta-badge">beta</span></div>
                 <div class="col">

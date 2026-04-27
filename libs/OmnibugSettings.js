@@ -53,6 +53,10 @@ class OmnibugSettings {
             // e.g. ["sgtm.mycompany.com/track", "data.mysite.io/collect"]
             customGA4Patterns: [],
 
+            // If true, the popup buffer is NOT cleared when the user navigates to a new page.
+            // Default false: each page starts fresh (matches classic Omnibug behavior).
+            keepHistoryAcrossPages: false,
+
             // JSON defining the params to rename
             renameParameters: {},
 
